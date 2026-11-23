@@ -1,0 +1,106 @@
+/*
+	Enable VOP0 and VOP1 for 8K HDMI. Other devices must not use these nodes.
+	Define TSPI_HDMI_TX1_8K for 8K output. Disable the other display macros.
+*/
+
+
+// #define TSPI_HDMI_TX1_8K
+
+
+
+/******************** HDMI TX1 ********************/
+// Do not enable HDMI TX1 and eDP TX1 at the same time.
+&hdmi1 {
+	enable-gpios = <&gpio1 RK_PD3 GPIO_ACTIVE_HIGH>;
+	cec-enable = "true";
+	pinctrl-0 = <&hdmim2_tx1_cec &hdmim0_tx1_hpd &hdmim1_tx1_scl &hdmim1_tx1_sda>;
+	pinctrl-names = "default";
+	status = "disabled";
+};
+
+&hdmi1_in_vp0 {
+	status = "disabled";
+};
+
+&hdmi1_in_vp1 {
+	status = "disabled";
+};
+
+&hdmi1_in_vp2 {
+	status = "disabled";
+};
+
+&route_hdmi1 {
+	status = "disabled";
+};
+
+&hdptxphy1 {
+	status = "disabled";
+};
+
+&hdmi1_sound { //i2s6_8ch
+	status = "disabled";
+};
+/******************** END ********************/
+
+
+#if defined(TSPI_HDMI_TX1)
+&hdmi1 {
+	status = "okay";
+};
+
+&hdmi1_in_vp1 {
+	status = "okay";
+};
+
+&route_hdmi1 {
+	status = "okay";
+	connect = <&vp1_out_hdmi1>;
+};
+
+
+&hdptxphy1 {
+	status = "okay";
+};
+
+&hdmi1_sound {
+	status = "okay";
+};
+#endif
+
+
+
+#if defined(TSPI_HDMI_TX1_8K)
+&hdmi1 {
+	status = "okay";
+};
+
+&hdmi1_in_vp0 {
+	status = "okay";
+};
+
+&hdmi1_in_vp1 {
+	status = "okay";
+};
+
+&route_hdmi1 {
+	status = "okay";
+	connect = <&vp0_out_hdmi1>;
+};
+
+
+&hdptxphy1 {
+	status = "okay";
+};
+
+&hdmi1_sound {
+	status = "okay";
+};
+
+&vop {
+	status = "okay";
+	assigned-clocks = <&cru ACLK_VOP>;
+	assigned-clock-rates = <800000000>;
+};
+
+#endif

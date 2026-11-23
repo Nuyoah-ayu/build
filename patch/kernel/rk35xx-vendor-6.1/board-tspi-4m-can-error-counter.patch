@@ -1,0 +1,18 @@
+Subject: [PATCH] can: rockchip: log sampled nonzero error counters
+
+Avoid periodic zero-counter messages and register reads after runtime put.
+
+--- a/drivers/net/can/rockchip/rk3568_can.c
++++ b/drivers/net/can/rockchip/rk3568_can.c
+@@ -337,8 +337,8 @@
+ 	pm_runtime_put(rcan->dev);
+ 
+-	netdev_dbg(ndev, "%s RX_ERR_CNT=0x%08x, TX_ERR_CNT=0x%08x\n", __func__,
+-		   rk3568_can_read(rcan, CAN_RX_ERR_CNT),
+-		   rk3568_can_read(rcan, CAN_TX_ERR_CNT));
++	if (bec->rxerr || bec->txerr)
++		netdev_dbg(ndev, "%s RX_ERR_CNT=0x%08x, TX_ERR_CNT=0x%08x\n",
++			   __func__, bec->rxerr, bec->txerr);
+ 
+ 	return 0;
+ }

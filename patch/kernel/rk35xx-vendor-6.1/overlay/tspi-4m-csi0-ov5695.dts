@@ -1,0 +1,43 @@
+/dts-v1/;
+/plugin/;
+#include <dt-bindings/clock/rk3588-cru.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/pinctrl/rockchip.h>
+#include <dt-bindings/power/rk3588-power.h>
+
+/ { compatible = "ayu,tspi-4m", "rockchip,rk3588"; };
+
+&i2c3 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	ov5695@36 {
+		compatible = "ovti,ov5695";
+		reg = <0x36>;
+		clocks = <&cru CLK_MIPI_CAMARAOUT_M1>;
+		clock-names = "xvclk";
+		pinctrl-names = "default";
+		pinctrl-0 = <&mipim0_camera1_clk>;
+		power-domains = <&power RK3588_PD_VI>;
+
+		reset-gpios = <&gpio1 RK_PB5 GPIO_ACTIVE_LOW>;
+		power-gpios = <&gpio1 RK_PB4 GPIO_ACTIVE_HIGH>;
+
+		rockchip,camera-module-index = <2>;
+		rockchip,camera-module-facing = "back";
+		rockchip,camera-module-name = "TSPI-4M";
+		rockchip,camera-module-lens-name = "CHT842-MD";
+		port {
+			ov5695_out0: endpoint {
+				remote-endpoint = <&mipidcphy0_in_imx415>;
+				data-lanes = <1 2>;
+			};
+		};
+	};
+};
+
+&imx415_csi0 { status = "disabled"; };
+&imx415_out0 { status = "disabled"; };
+&mipidcphy0_in_imx415 {
+	remote-endpoint = <&ov5695_out0>;
+	data-lanes = <1 2>;
+};

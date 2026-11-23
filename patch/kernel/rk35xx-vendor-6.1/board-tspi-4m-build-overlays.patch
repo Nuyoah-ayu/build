@@ -1,0 +1,25 @@
+Subject: [PATCH] arm64: dts: rockchip: build TSPI-4M peripheral overlays
+
+--- a/arch/arm64/boot/dts/rockchip/overlay/Makefile
++++ b/arch/arm64/boot/dts/rockchip/overlay/Makefile
+@@ -1,2 +1,20 @@
+ # SPDX-License-Identifier: GPL-2.0
++
++dtbo-$(CONFIG_ARCH_ROCKCHIP) += \
++	tspi-4m-can1.dtbo \
++	tspi-4m-csi0-ov5695.dtbo \
++	tspi-4m-display-dp0-8k.dtbo \
++	tspi-4m-display-dp0.dtbo \
++	tspi-4m-display-dsi0-10inch.dtbo \
++	tspi-4m-display-dsi0-3inch.dtbo \
++	tspi-4m-display-dsi1-10inch.dtbo \
++	tspi-4m-display-dsi1-3inch.dtbo \
++	tspi-4m-display-edp1.dtbo \
++	tspi-4m-display-hdmi0-8k.dtbo \
++	tspi-4m-display-hdmi0.dtbo \
++	tspi-4m-display-hdmi1-8k.dtbo \
++	tspi-4m-display-hdmi1.dtbo \
++	tspi-4m-display-off.dtbo \
++	tspi-4m-mini-pcie.dtbo
++
+ dtbo-$(CONFIG_ARCH_ROCKCHIP) += \

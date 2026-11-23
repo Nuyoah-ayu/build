@@ -1,0 +1,30 @@
+Subject: [PATCH] wifi: rtw89: find board rfkill override through device ancestors
+
+PCI endpoints and root ports can lack an OF node.
+Find the board opt-in property on the platform PCI controller.
+
+--- a/drivers/net/wireless/realtek/rtw89/core.c
++++ b/drivers/net/wireless/realtek/rtw89/core.c
+@@ -2,6 +2,7 @@
+ /* Copyright(c) 2019-2020  Realtek Corporation
+  */
+ #include <linux/ip.h>
++#include <linux/of.h>
+ #include <linux/sort.h>
+ #include <linux/udp.h>
+ 
+@@ -7317,6 +7318,14 @@
+ 
+ static bool rtw89_chip_has_rfkill(struct rtw89_dev *rtwdev)
+ {
++	struct device *dev;
++
++	for (dev = rtwdev->dev; dev; dev = dev->parent) {
++		if (of_property_read_bool(dev->of_node,
++					  "rtw89,bypass-hw-rfkill"))
++			return false;
++	}
++
+ 	return !!rtwdev->chip->rfkill_init;
+ }
+ 

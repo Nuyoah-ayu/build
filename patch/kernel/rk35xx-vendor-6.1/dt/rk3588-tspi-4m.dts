@@ -1,0 +1,56 @@
+/dts-v1/;
+
+#include "tspi-4m-usr.dtsi"
+#include "rk3588-linux.dtsi"
+#define TSPI_HDMI_TX0
+#define TSPI_HDMI_TX1
+#include "tspi-4m-hdmi-tx0.dtsi"
+#include "tspi-4m-hdmi-tx1.dtsi"
+#include "tspi-4m-hdmi-rx.dtsi"
+#include "tspi-4m-gmac.dtsi"
+#include "tspi-4m-mipi-csi0.dtsi"
+#include "tspi-4m-mipi-csi1.dtsi"
+#include "tspi-4m-mipi-csi2.dtsi"
+#include "tspi-4m-mipi-csi3.dtsi"
+
+/ {
+	model = "TSPI-4M V1.0 Board";
+	compatible = "ayu,tspi-4m", "rockchip,rk3588";
+
+	reserved-memory {
+		cma {
+			/delete-property/ reg;
+			size = <0x0 0x10000000>;
+			alloc-ranges = <0x0 0x10000000 0x0 0xf0000000>;
+		};
+	};
+};
+
+&fiq_debugger {
+	status = "disabled";
+};
+
+&uart2 {
+	pinctrl-0 = <&uart2m0_xfer>;
+	status = "okay";
+};
+
+&can1 {
+	status = "disabled";
+};
+
+&pcie2x1l0 {
+	rtw89,bypass-hw-rfkill;
+};
+
+&usbdp_phy0 {
+	status = "okay";
+};
+
+&mipi_dcphy0 {
+	status = "okay";
+};
+
+&mipi_dcphy1 {
+	status = "okay";
+};

@@ -1,0 +1,74 @@
+Backport firmware cut fallback, HE capability assignment, and PPDU GI matching.
+
+--- a/fw.c
++++ b/fw.c
+@@ -462,7 +462,7 @@
+ 	const u8 *mfw = firmware->data;
+ 	u32 mfw_len = firmware->size;
+ 	const struct rtw89_mfw_hdr *mfw_hdr = (const struct rtw89_mfw_hdr *)mfw;
+-	const struct rtw89_mfw_info *mfw_info;
++	const struct rtw89_mfw_info *mfw_info = NULL, *candidate;
+ 	int i;
+ 
+ 	if (mfw_hdr->sig != RTW89_MFW_SIG) {
+@@ -476,14 +476,19 @@
+ 	}
+ 
+ 	for (i = 0; i < mfw_hdr->fw_nr; i++) {
+-		mfw_info = &mfw_hdr->info[i];
+-		if (mfw_info->type == type) {
+-			if (mfw_info->cv == rtwdev->hal.cv && !mfw_info->mp)
+-				goto found;
+-			if (type == RTW89_FW_LOGFMT)
+-				goto found;
++		candidate = &mfw_hdr->info[i];
++		if (candidate->type != type)
++			continue;
++		if (type == RTW89_FW_LOGFMT) {
++			mfw_info = candidate;
++			goto found;
+ 		}
+-	}
++		if (candidate->cv <= rtwdev->hal.cv && !candidate->mp &&
++		    (!mfw_info || mfw_info->cv < candidate->cv))
++			mfw_info = candidate;
++	}
++	if (mfw_info)
++		goto found;
+ 
+ 	if (!nowarn)
+ 		rtw89_err(rtwdev, "no suitable firmware found\n");
+@@ -606,10 +611,12 @@
+ 	struct rtw89_hal *hal = &rtwdev->hal;
+ 	struct rtw89_fw_suit *fw_suit;
+ 
+-	if (hal->cv != elm->u.bbmcu.cv)
++	if (hal->cv < elm->u.bbmcu.cv)
+ 		return 1; /* ignore this element */
+ 
+ 	fw_suit = rtw89_fw_suit_get(rtwdev, type);
++	if (fw_suit->data)
++		return 1;
+ 	fw_suit->data = elm->u.bbmcu.contents;
+ 	fw_suit->size = le32_to_cpu(elm->size);
+ 
+--- a/core.c
++++ b/core.c
+@@ -1803,6 +1803,8 @@
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+ 	gi_ltf = rtw89_rxdesc_to_nl_he_eht_gi(rtwdev, desc_info->gi_ltf, false, eht);
++#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
++	gi_ltf = rtw89_rxdesc_to_nl_he_gi(rtwdev, desc_info, false);
+ #else
+ 	gi_ltf = 0;
+ #endif
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+@@ -4067,6 +4067,9 @@
+ 
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
+ 	_ieee80211_set_sband_iftype_data(sband, iftype_data, idx);
++#else
++	sband->iftype_data = iftype_data;
++	sband->n_iftype_data = idx;
+ #endif
+ }
