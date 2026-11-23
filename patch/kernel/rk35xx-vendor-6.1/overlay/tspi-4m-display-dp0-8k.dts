@@ -1,0 +1,17 @@
+/dts-v1/;
+/plugin/;
+#include <dt-bindings/clock/rk3588-cru.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/pinctrl/rockchip.h>
+#include <dt-bindings/display/drm_mipi_dsi.h>
+
+/ {
+	compatible = "ayu,tspi-4m", "rockchip,rk3588";
+};
+
+#define TSPI_DP_TX0_8K
+#include "../tspi-4m-DP0.dtsi"
+
+&usbdp_phy0_u3 { status = "disabled"; };
+&usbdrd_dwc3_0 { maximum-speed = "high-speed"; };

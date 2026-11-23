@@ -1,0 +1,87 @@
+From: AYU <2209776192@localhost>
+Subject: Bluetooth: recognize RTL8922AU and load its firmware
+
+Backport the RTL8922A identifiers from mainline btrtl and btusb.
+The vendor tree already includes the Realtek v2 firmware parser.
+
+diff --git a/drivers/bluetooth/btrtl.c b/drivers/bluetooth/btrtl.c
+--- a/drivers/bluetooth/btrtl.c
++++ b/drivers/bluetooth/btrtl.c
+@@ -31,6 +31,7 @@
+ #define RTL_ROM_LMP_8822B	0x8822
+ #define RTL_ROM_LMP_8852A	0x8852
+ #define RTL_ROM_LMP_8851B	0x8851
++#define RTL_ROM_LMP_8922A	0x8922
+ #define RTL_CONFIG_MAGIC	0x8723ab55
+ 
+ #define IC_MATCH_FL_LMPSUBV	(1 << 0)
+@@ -68,6 +69,7 @@
+ 	CHIP_ID_8852B = 20,
+ 	CHIP_ID_8852C = 25,
+ 	CHIP_ID_8851B = 36,
++	CHIP_ID_8922A = 44,
+ };
+ 
+ struct id_table {
+@@ -278,7 +280,13 @@
+ 	  .fw_name  = "rtl_bt/rtl8852cu_fw.bin",
+ 	  .cfg_name = "rtl_bt/rtl8852cu_config" },
+ 
+-	/* 8851B */
++	{ IC_INFO(RTL_ROM_LMP_8922A, 0xa, 0xc, HCI_USB),
++	  .config_needed = false,
++	  .has_rom_version = true,
++	  .has_msft_ext = true,
++	  .fw_name  = "rtl_bt/rtl8922au_fw.bin",
++	  .cfg_name = "rtl_bt/rtl8922au_config" },
++
+ 	{ IC_INFO(RTL_ROM_LMP_8851B, 0xb, 0xc, HCI_USB),
+ 	  .config_needed = false,
+ 	  .has_rom_version = true,
+@@ -621,6 +629,7 @@
+ 		{ RTL_ROM_LMP_8852A, 18 },	/* 8852A */
+ 		{ RTL_ROM_LMP_8852A, 20 },	/* 8852B */
+ 		{ RTL_ROM_LMP_8852A, 25 },	/* 8852C */
++		{ RTL_ROM_LMP_8922A, 44 },
+ 		{ RTL_ROM_LMP_8851B, 36 },	/* 8851B */
+ 	};
+ 
+@@ -1150,6 +1159,7 @@
+ 	case RTL_ROM_LMP_8852A:
+ 	case RTL_ROM_LMP_8703B:
+ 	case RTL_ROM_LMP_8851B:
++	case RTL_ROM_LMP_8922A:
+ 		return btrtl_setup_rtl8723b(hdev, btrtl_dev);
+ 	default:
+ 		rtl_dev_info(hdev, "assuming no firmware upload needed");
+@@ -1175,6 +1185,7 @@
+ 	case CHIP_ID_8852B:
+ 	case CHIP_ID_8852C:
+ 	case CHIP_ID_8851B:
++	case CHIP_ID_8922A:
+ 		set_bit(HCI_QUIRK_VALID_LE_STATES, &hdev->quirks);
+ 		set_bit(HCI_QUIRK_WIDEBAND_SPEECH_SUPPORTED, &hdev->quirks);
+ 		hci_set_aosp_capable(hdev);
+@@ -1396,3 +1407,5 @@
+ MODULE_FIRMWARE("rtl_bt/rtl8852bu_config.bin");
+ MODULE_FIRMWARE("rtl_bt/rtl8852cu_fw.bin");
+ MODULE_FIRMWARE("rtl_bt/rtl8852cu_config.bin");
++MODULE_FIRMWARE("rtl_bt/rtl8922au_fw.bin");
++MODULE_FIRMWARE("rtl_bt/rtl8922au_config.bin");
+diff --git a/drivers/bluetooth/btusb.c b/drivers/bluetooth/btusb.c
+--- a/drivers/bluetooth/btusb.c
++++ b/drivers/bluetooth/btusb.c
+@@ -518,6 +518,13 @@
+ 	{ USB_DEVICE(0x0cb8, 0xc549), .driver_info = BTUSB_REALTEK |
+ 						     BTUSB_WIDEBAND_SPEECH },
+ 
++	{ USB_DEVICE(0x0bda, 0x8922), .driver_info = BTUSB_REALTEK |
++						     BTUSB_WIDEBAND_SPEECH },
++	{ USB_DEVICE(0x0bda, 0xd922), .driver_info = BTUSB_REALTEK |
++						     BTUSB_WIDEBAND_SPEECH },
++	{ USB_DEVICE(0x0bda, 0xd923), .driver_info = BTUSB_REALTEK |
++						     BTUSB_WIDEBAND_SPEECH },
++
+ 	/* Realtek 8852CE Bluetooth devices */
+ 	{ USB_DEVICE(0x04ca, 0x4007), .driver_info = BTUSB_REALTEK |
+ 						     BTUSB_WIDEBAND_SPEECH },

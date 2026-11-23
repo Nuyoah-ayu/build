@@ -1,0 +1,85 @@
+#!/bin/sh
+set -eu
+
+gadget=/sys/kernel/config/usb_gadget/tspi-adb
+functionfs=/dev/usb-ffs/adb
+udc=${ADBD_GADGET_UDC:-fc000000.usb}
+
+cleanup()
+{
+	if [ -d "$gadget" ]; then
+		if [ -n "$(cat "$gadget/UDC")" ]; then
+			printf '\n' > "$gadget/UDC"
+		fi
+		if [ -L "$gadget/configs/c.1/ffs.adb" ]; then
+			rm "$gadget/configs/c.1/ffs.adb"
+		fi
+	fi
+	if mountpoint -q "$functionfs"; then
+		umount "$functionfs"
+	fi
+	for directory in configs/c.1/strings/0x409 configs/c.1 functions/ffs.adb strings/0x409; do
+		if [ -d "$gadget/$directory" ]; then
+			rmdir "$gadget/$directory"
+		fi
+	done
+	if [ -d "$gadget" ]; then
+		rmdir "$gadget"
+	fi
+}
+
+setup()
+{
+	modprobe libcomposite
+	if ! mountpoint -q /sys/kernel/config; then
+		mount -t configfs configfs /sys/kernel/config
+	fi
+	attempt=0
+	until [ -e "/sys/class/udc/$udc" ]; do
+		attempt=$((attempt + 1))
+		if [ "$attempt" -ge 30 ]; then
+			echo "USB controller $udc is unavailable" >&2
+			return 1
+		fi
+		sleep 1
+	done
+	cleanup
+	mkdir -p "$gadget/strings/0x409" "$gadget/configs/c.1/strings/0x409"
+	printf '0x18d1\n' > "$gadget/idVendor"
+	printf '0x0100\n' > "$gadget/idProduct"
+	printf 'TSPI\n' > "$gadget/strings/0x409/manufacturer"
+	printf 'TSPI-4M ADB\n' > "$gadget/strings/0x409/product"
+	cut -c1-16 /etc/machine-id > "$gadget/strings/0x409/serialnumber"
+	printf 'ADB\n' > "$gadget/configs/c.1/strings/0x409/configuration"
+	printf '120\n' > "$gadget/configs/c.1/MaxPower"
+	mkdir -p "$gadget/functions/ffs.adb" "$functionfs"
+	ln -s "$gadget/functions/ffs.adb" "$gadget/configs/c.1/ffs.adb"
+	mount -t functionfs adb "$functionfs"
+}
+
+case "${1:-}" in
+	setup)
+		setup
+		;;
+	activate)
+		if [ -f "$gadget/functions/ffs.adb/ready" ]; then
+			ready=$(cat "$gadget/functions/ffs.adb/ready")
+		elif [ -e "$functionfs/ep1" ] && [ -e "$functionfs/ep2" ]; then
+			ready=1
+		else
+			ready=0
+		fi
+		if [ "$ready" != 1 ]; then
+			echo "ADB FunctionFS descriptors are not ready" >&2
+			exit 1
+		fi
+		printf '%s\n' "$udc" > "$gadget/UDC"
+		;;
+	reset)
+		cleanup
+		;;
+	*)
+		echo "Usage: $0 {setup|activate|reset}" >&2
+		exit 2
+		;;
+esac

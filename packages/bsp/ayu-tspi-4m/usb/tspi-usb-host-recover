@@ -1,0 +1,64 @@
+#!/bin/sh
+set -eu
+
+case "${1:-status}" in
+	status)
+		lsusb -t
+		if [ -r /sys/kernel/debug/usb/ehci/fc880000.usb/registers ]; then
+			cat /sys/kernel/debug/usb/ehci/fc880000.usb/registers
+		fi
+		exit 0
+		;;
+	recover) ;;
+	*) echo "Usage: $0 [status|recover]" >&2; exit 2 ;;
+esac
+
+[ "$(id -u)" = 0 ] || { echo "Run with sudo." >&2; exit 1; }
+tr '\000' '\n' < /proc/device-tree/compatible | grep -Eq '^(rockchip|ayu),tspi-4m$' || {
+	echo "This command requires a TSPI-4M board." >&2
+	exit 1
+}
+exec 9>/run/tspi-usb-host-recover.lock
+flock -n 9 || { echo "Recovery is already running." >&2; exit 1; }
+
+for controller in fc880000.usb fc8c0000.usb; do
+	path=/sys/bus/platform/devices/$controller
+	[ -d "$path" ] || { echo "Missing controller: $controller" >&2; exit 1; }
+	if [ -n "$(find "$path/" -type d -name block -print -quit)" ]; then
+		echo "USB storage is attached to $controller. Remove it safely first." >&2
+		exit 1
+	fi
+done
+
+log=/var/log/tspi-usb-recovery-$(date +%Y%m%d-%H%M%S).log
+{
+	uname -a
+	lsusb -t
+	dmesg | tail -100
+	if [ -r /sys/kernel/debug/usb/ehci/fc880000.usb/registers ]; then
+		cat /sys/kernel/debug/usb/ehci/fc880000.usb/registers
+	fi
+} > "$log"
+echo "Saved diagnostics: $log"
+echo "Reinitializing USB host1. Its keyboard, mouse, and Bluetooth will disconnect briefly."
+
+for entry in ehci-platform:fc880000.usb ohci-platform:fc8c0000.usb; do
+	driver=${entry%%:*}
+	controller=${entry#*:}
+	if [ -L "/sys/bus/platform/drivers/$driver/$controller" ]; then
+		printf '%s' "$controller" > "/sys/bus/platform/drivers/$driver/unbind"
+	fi
+done
+
+failed=0
+for entry in ehci-platform:fc880000.usb ohci-platform:fc8c0000.usb; do
+	driver=${entry%%:*}
+	controller=${entry#*:}
+	if ! printf '%s' "$controller" > "/sys/bus/platform/drivers/$driver/bind"; then
+		echo "Failed to bind $controller." >&2
+		failed=1
+	fi
+done
+sleep 3
+lsusb -t
+exit "$failed"

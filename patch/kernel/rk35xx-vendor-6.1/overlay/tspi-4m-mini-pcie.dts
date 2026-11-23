@@ -1,0 +1,7 @@
+/dts-v1/;
+/plugin/;
+
+/ { compatible = "ayu,tspi-4m", "rockchip,rk3588"; };
+
+&sata0 { status = "disabled"; };
+&pcie2x1l2 { status = "okay"; };

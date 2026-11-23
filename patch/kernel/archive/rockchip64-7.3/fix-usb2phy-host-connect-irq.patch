@@ -1,0 +1,28 @@
+Subject: [PATCH] phy: rockchip-inno-usb2: refresh host state on line interrupt
+
+A stale host_disconnect flag can suspend a connected USB hub.
+Refresh it on an enabled line-state interrupt, as in the Rockchip BSP.
+
+--- a/drivers/phy/rockchip/phy-rockchip-inno-usb2.c
++++ b/drivers/phy/rockchip/phy-rockchip-inno-usb2.c
+@@ -1041,7 +1041,8 @@ static irqreturn_t rockchip_usb2phy_linestate_irq(int irq, void *data)
+ 	struct rockchip_usb2phy_port *rport = data;
+ 	struct rockchip_usb2phy *rphy = dev_get_drvdata(rport->phy->dev.parent);
+ 
+-	if (!property_enabled(rphy->grf, &rport->port_cfg->ls_det_st))
++	if (!property_enabled(rphy->grf, &rport->port_cfg->ls_det_st) ||
++	    !property_enabled(rphy->grf, &rport->port_cfg->ls_det_en))
+ 		return IRQ_NONE;
+ 
+ 	mutex_lock(&rport->mutex);
+@@ -1050,6 +1051,10 @@ static irqreturn_t rockchip_usb2phy_linestate_irq(int irq, void *data)
+ 	property_enable(rphy->grf, &rport->port_cfg->ls_det_en, false);
+ 	property_enable(rphy->grf, &rport->port_cfg->ls_det_clr, true);
+ 
++	if (rport->port_id == USB2PHY_PORT_HOST &&
++	    rport->port_cfg->disfall_en.offset)
++		rport->host_disconnect = false;
++
+ 	mutex_unlock(&rport->mutex);
+ 
+ 	/*

@@ -1,0 +1,55 @@
+Subject: [PATCH] wifi: rtlwifi: rtw89: allow bypassing the chip rfkill poll
+
+The RTL8852CE on the RK3588 TSPI-4M reads its kill state from its own
+internal GPIO9 and never reports it as released:
+
+  rtw89_8852ce 0002:21:00.0: rfkill hardware state changed to disable
+
+That lands in wiphy_rfkill_set_hw_state(), so mac80211 blocks the wiphy
+for the whole boot. Writing /sys/class/rfkill/rfkill1/state cannot help.
+The driver re-polls the chip on every poll work and pushes it back to
+blocked.
+
+Several boards wire no kill line, or wire it active permanently. A stuck
+input then blocks the radio on a board with no kill switch at all.
+
+Add a device tree boolean, opt-in per board:
+
+  rtw89,bypass-hw-rfkill;
+
+Put it on the PCI host bridge node, for example pcie2x1l0. A PCIe device
+only has its own of_node when the host bridge carries a PCI device node
+for it, and these boards do not. Walk the device ancestry to find the
+property on the platform host controller. PCI root ports and the host
+bridge can have no of_node, so checking one parent misses the property.
+
+Software rfkill keeps working through wiphy_rfkill_block(), so userspace
+still controls the radio.
+
+Signed-off-by: Armbian <info@armbian.com>
+---
+
+--- a/drivers/net/wireless/realtek/rtw89/core.c
++++ b/drivers/net/wireless/realtek/rtw89/core.c
+@@ -2,6 +2,7 @@
+ /* Copyright(c) 2019-2020  Realtek Corporation
+  */
+ #include <linux/ip.h>
++#include <linux/of.h>
+ #include <linux/sort.h>
+ #include <linux/udp.h>
+ 
+@@ -6138,6 +6139,14 @@
+ 
+ static bool rtw89_chip_has_rfkill(struct rtw89_dev *rtwdev)
+ {
++	struct device *dev;
++
++	for (dev = rtwdev->dev; dev; dev = dev->parent) {
++		if (of_property_read_bool(dev->of_node,
++					  "rtw89,bypass-hw-rfkill"))
++			return false;
++	}
++
+ 	return !!rtwdev->chip->rfkill_init;
+ }

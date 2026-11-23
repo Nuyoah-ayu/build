@@ -1,0 +1,12 @@
+/dts-v1/;
+/plugin/;
+
+/ { compatible = "ayu,tspi-4m", "rockchip,rk3588"; };
+
+&es8388_sound { status = "disabled"; };
+
+&can1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&can1m1_pins>;
+	status = "okay";
+};

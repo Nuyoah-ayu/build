@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=TSPI Display Settings
+Exec=/usr/local/bin/tspi-keep-awake
+OnlyShowIn=XFCE;
+Terminal=false
+NoDisplay=true

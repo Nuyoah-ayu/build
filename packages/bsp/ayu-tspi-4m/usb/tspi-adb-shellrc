@@ -1,0 +1,6 @@
+case $- in
+	*i*)
+		export SHELL=/bin/bash
+		exec /bin/bash
+		;;
+esac

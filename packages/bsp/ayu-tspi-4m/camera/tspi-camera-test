@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+import argparse
+import concurrent.futures
+import json
+from pathlib import Path
+import re
+import subprocess
+import time
+
+
+PORTS = {3: "CSI0", 2: "CSI1", 7: "CSI2", 4: "CSI3"}
+
+
+def discover():
+    cameras = []
+    for media in sorted(Path("/dev").glob("media[0-9]*")):
+        result = subprocess.run(["media-ctl", "-d", str(media), "-p"],
+                                capture_output=True, text=True, timeout=5)
+        topology = result.stdout
+        if result.returncode or not re.search(r"^driver\s+rkcif\s*$", topology, re.MULTILINE):
+            continue
+        sensors = re.findall(r"^- entity \d+: (\S*imx415 (\d+)-0037) ", topology, re.MULTILINE)
+        entity = re.search(r"^- entity \d+: stream_cif_mipi_id0 .*?(?=^- entity|\Z)",
+                           topology, re.MULTILINE | re.DOTALL)
+        node = re.search(r"device node name (/dev/video\d+)", entity.group() if entity else "")
+        if not node:
+            continue
+        for sensor, bus in sensors:
+            cameras.append({"port": PORTS.get(int(bus), "unknown"), "sensor": sensor,
+                            "media": str(media), "device": node.group(1)})
+    return sorted(cameras, key=lambda camera: camera["port"])
+
+
+def capture(camera, frames, timeout):
+    command = ["v4l2-ctl", "-d", camera["device"],
+               "--set-fmt-video=width=3840,height=2160,pixelformat=GB10",
+               "--stream-mmap=4", "--stream-count=" + str(frames),
+               "--stream-to=/dev/null", "--verbose"]
+    started = time.monotonic()
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+        output = result.stdout + result.stderr
+        received = len(re.findall(r"cap dqbuf:", output))
+        record = dict(camera, passed=result.returncode == 0 and received == frames,
+                      frames=received, seconds=round(time.monotonic() - started, 3))
+        if not record["passed"]:
+            record["error"] = output[-2000:]
+        return record
+    except subprocess.TimeoutExpired:
+        return dict(camera, passed=False, error="capture timed out")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Capture connected IMX415 cameras concurrently at 3840x2160 RAW10.")
+    parser.add_argument("--list", action="store_true", help="List detected capture paths without streaming.")
+    parser.add_argument("--frames", type=int, default=90)
+    parser.add_argument("--timeout", type=float, default=25)
+    arguments = parser.parse_args()
+    if arguments.frames < 1 or arguments.timeout <= 0:
+        parser.error("frames and timeout must be positive")
+    cameras = discover()
+    absent = sorted(set(PORTS.values()) - {camera["port"] for camera in cameras})
+    if arguments.list:
+        print(json.dumps({"detected": cameras, "not_detected": absent}, indent=2))
+        return 0 if cameras else 1
+    if not cameras:
+        print(json.dumps({"passed": False, "error": "No IMX415 capture path found. Use the vendor kernel."}))
+        return 1
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(cameras)) as pool:
+        futures = [pool.submit(capture, camera, arguments.frames, arguments.timeout) for camera in cameras]
+        results = [future.result() for future in futures]
+    print(json.dumps({"captures": results, "not_detected": absent}, indent=2))
+    return 0 if all(result["passed"] for result in results) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

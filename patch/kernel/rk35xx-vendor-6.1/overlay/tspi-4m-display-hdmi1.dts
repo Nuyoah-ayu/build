@@ -1,0 +1,14 @@
+/dts-v1/;
+/plugin/;
+#include <dt-bindings/clock/rk3588-cru.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/pinctrl/rockchip.h>
+#include <dt-bindings/display/drm_mipi_dsi.h>
+
+/ {
+	compatible = "ayu,tspi-4m", "rockchip,rk3588";
+};
+
+#define TSPI_HDMI_TX1
+#include "../tspi-4m-hdmi-tx1.dtsi"

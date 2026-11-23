@@ -1,0 +1,60 @@
+
+/ {
+	/* If hdmirx node is disabled, delete the reserved-memory node here. */
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/* Reserve 256MB memory for hdmirx-controller@fdee0000 */
+		cma {
+			compatible = "shared-dma-pool";
+			reusable;
+			reg = <0x0 (256 * 0x100000) 0x0 (256 * 0x100000)>;
+			linux,cma-default;
+		};
+	};
+
+
+
+
+	hdmiin-sound {
+		compatible = "rockchip,hdmi";
+		rockchip,mclk-fs = <128>;
+		rockchip,format = "i2s";
+		rockchip,bitclock-master = <&hdmirx_ctrler>;
+		rockchip,frame-master = <&hdmirx_ctrler>;
+		rockchip,card-name = "rockchip,hdmiin";
+		rockchip,cpu = <&i2s7_8ch>;
+		rockchip,codec = <&hdmirx_ctrler 0>;
+		rockchip,jack-det;
+	};
+};
+
+
+/* Should work with at least 128MB cma reserved above. */
+&hdmirx_ctrler {
+	status = "okay";
+
+	#sound-dai-cells = <1>;
+	/* Effective level used to trigger HPD: 0-low, 1-high */
+	hpd-trigger-level = <1>;
+	hdmirx-det-gpios = <&gpio2 RK_PC5 GPIO_ACTIVE_LOW>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&hdmim1_rx &hdmirx_det>;
+};
+
+// 2. Enable the dedicated I2S7 interface for HDMI RX.
+&i2s7_8ch {
+    status = "okay";
+};
+
+
+
+&pinctrl {
+	hdmi {
+		hdmirx_det: hdmirx-det {
+			rockchip,pins = <2 RK_PC5 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+};    

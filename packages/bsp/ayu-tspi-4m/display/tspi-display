@@ -1,0 +1,161 @@
+#!/usr/bin/python3
+import argparse
+import datetime
+import os
+from pathlib import Path
+import platform
+import shutil
+import subprocess
+import tempfile
+
+
+PREFIX = "tspi-4m-display-"
+MODES = {
+    "hdmi0": ({0}, "hdmi0"),
+    "hdmi1": ({1}, "hdmi1"),
+    "dp0": ({2}, "dp0"),
+    "edp1": ({2}, "dp1"),
+    "dsi0-10inch": ({3}, "dsi0"),
+    "dsi0-3inch": ({3}, "dsi0"),
+    "dsi1-10inch": ({3}, "dsi1"),
+    "dsi1-3inch": ({3}, "dsi1"),
+    "hdmi0-8k": ({0, 1}, "hdmi0"),
+    "hdmi1-8k": ({0, 1}, "hdmi1"),
+    "dp0-8k": ({0, 1}, "dp0"),
+}
+
+
+def select_overlays(modes):
+    if modes == ["default"]:
+        return []
+    if modes == ["off"]:
+        return [PREFIX + "off"]
+    expanded = []
+    for mode in modes:
+        expanded.extend(["hdmi0", "hdmi1"] if mode == "hdmi" else [mode])
+    ports = set()
+    devices = set()
+    for mode in expanded:
+        if mode not in MODES:
+            raise ValueError(f"Unknown display mode: {mode}")
+        required_ports, device = MODES[mode]
+        if ports & required_ports or device in devices:
+            raise ValueError(f"Display resource conflict: {mode}")
+        ports.update(required_ports)
+        devices.add(device)
+    return [PREFIX + "off"] + [PREFIX + mode for mode in expanded]
+
+
+def read_environment(text):
+    values = {}
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key in values:
+            raise ValueError(f"Duplicate boot setting: {key}")
+        values[key] = value.strip()
+    return values
+
+
+def update_environment(text, selected):
+    values = read_environment(text)
+    retained = [name for name in values.get("overlays", "").split()
+                if not name.startswith(PREFIX)]
+    replacement = "overlays=" + " ".join(retained + selected)
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if "=" in line and line.split("=", 1)[0].strip() == "overlays":
+            lines[index] = replacement
+            break
+    else:
+        lines.append(replacement)
+    return "\n".join(lines) + "\n"
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Select TSPI-4M displays for the next boot.")
+    parser.add_argument("modes", nargs="*", help="Display modes. Use --list to show choices.")
+    parser.add_argument("--list", action="store_true")
+    parser.add_argument("--show", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    arguments = parser.parse_args()
+    if arguments.list:
+        print("default: restore dual HDMI\noff: disable display outputs\nhdmi: enable both HDMI outputs")
+        print("\n".join(MODES))
+        return
+    environment = Path("/boot/armbianEnv.txt")
+    text = environment.read_text()
+    values = read_environment(text)
+    if arguments.show or not arguments.modes:
+        print("Next boot overlays: " + values.get("overlays", "(base defaults)"))
+        print("Current kernel: " + platform.release())
+        return
+    selected = select_overlays(arguments.modes)
+    compatible = Path("/proc/device-tree/compatible").read_bytes().split(b"\0")
+    if b"ayu,tspi-4m" not in compatible or "vendor" not in platform.release():
+        raise ValueError("This command requires the TSPI-4M vendor kernel.")
+    fdtfile = values.get("fdtfile", "rockchip/rk3588-tspi-4m.dtb")
+    if fdtfile != "rockchip/rk3588-tspi-4m.dtb":
+        raise ValueError("Unexpected fdtfile. Select rockchip/rk3588-tspi-4m.dtb first.")
+    updated = update_environment(text, selected)
+    updated_values = read_environment(updated)
+    overlays = []
+    for name in updated_values["overlays"].split():
+        if Path(name).name != name:
+            raise ValueError(f"Invalid overlay name: {name}")
+        directory = Path("/boot/dtb/rockchip/overlay")
+        prefixes = values.get("overlay_prefix", "").split()
+        candidates = [directory / f"{prefix}-{name}.dtbo" for prefix in prefixes]
+        candidates.append(directory / f"{name}.dtbo")
+        overlay = next((path for path in candidates if path.is_file()), None)
+        if overlay is None:
+            raise ValueError(f"Missing overlay: {name}")
+        overlays.append(str(overlay))
+    for name in values.get("user_overlays", "").split():
+        if Path(name).name != name:
+            raise ValueError(f"Invalid user overlay name: {name}")
+        overlay = Path("/boot/overlay-user") / f"{name}.dtbo"
+        if not overlay.is_file():
+            raise ValueError(f"Missing user overlay: {name}")
+        overlays.append(str(overlay))
+    if overlays:
+        with tempfile.TemporaryDirectory(prefix="tspi-display-") as temporary:
+            subprocess.run(["fdtoverlay", "-i", str(Path("/boot/dtb") / fdtfile),
+                            "-o", str(Path(temporary) / "check.dtb"), *overlays], check=True)
+    if arguments.dry_run:
+        print(updated, end="")
+        return
+    if os.geteuid() != 0:
+        raise ValueError("Run this command with sudo.")
+    if updated == text:
+        print("The boot settings already match this selection.")
+        return
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    backup = environment.with_name(environment.name + "." + stamp + ".bak")
+    shutil.copy2(environment, backup)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", dir=environment.parent,
+                                         prefix=".tspi-display-", delete=False) as output:
+            temporary_path = Path(output.name)
+            output.write(updated)
+            output.flush()
+            os.fsync(output.fileno())
+        shutil.copystat(environment, temporary_path)
+        os.replace(temporary_path, environment)
+        os.sync()
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+    print("Backup: " + str(backup))
+    print("Next boot overlays: " + updated_values["overlays"])
+    print("Reboot to apply. This command does not reboot the board.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        raise SystemExit(str(error))

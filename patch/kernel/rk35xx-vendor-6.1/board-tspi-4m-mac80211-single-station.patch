@@ -1,0 +1,26 @@
+Subject: [PATCH] mac80211: create only the default station interface
+
+The vendor P2P block creates a second managed interface with the same MAC.
+Leave P2P interface creation to userspace.
+
+--- a/net/mac80211/main.c
++++ b/net/mac80211/main.c
+@@ -1411,18 +1411,6 @@
+ 				   "Failed to add default virtual iface\n");
+ 	}
+ 
+-	/* add one default AP interface if supported */
+-	if (local->hw.wiphy->interface_modes & (BIT(NL80211_IFTYPE_P2P_GO) |
+-	    BIT(NL80211_IFTYPE_P2P_CLIENT)) && !ieee80211_hw_check(hw, NO_AUTO_VIF)) {
+-		struct vif_params params = {0};
+-
+-		result = ieee80211_if_add(local, "p2p%d", NET_NAME_ENUM, NULL,
+-					  NL80211_IFTYPE_STATION, &params);
+-		if (result)
+-			wiphy_warn(local->hw.wiphy,
+-				   "Failed to add p2p virtual iface\n");
+-	}
+-
+ 	wiphy_unlock(hw->wiphy);
+ 	rtnl_unlock();
+ 
